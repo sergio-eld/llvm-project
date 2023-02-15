@@ -3074,6 +3074,7 @@ private:
           std::nullopt);
   void ParseDirectDeclarator(Declarator &D);
   void ParseDecompositionDeclarator(Declarator &D);
+  void ParseDestructuringDeclarator(Declarator &D);
   void ParseParenDeclarator(Declarator &D);
   void ParseFunctionDeclarator(Declarator &D, ParsedAttributes &FirstArgAttrs,
                                BalancedDelimiterTracker &Tracker,

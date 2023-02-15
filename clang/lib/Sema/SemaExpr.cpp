@@ -3390,6 +3390,7 @@ ExprResult Sema::BuildDeclarationNameExpr(
   case Decl::VarTemplateSpecialization:
   case Decl::VarTemplatePartialSpecialization:
   case Decl::Decomposition:
+  case Decl::Destructuring:
   case Decl::OMPCapturedExpr:
     // In C, "extern void blah;" is valid and is an r-value.
     if (!getLangOpts().CPlusPlus && !type.hasQualifiers() &&

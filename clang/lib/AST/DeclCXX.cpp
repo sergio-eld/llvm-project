@@ -3324,6 +3324,47 @@ void DecompositionDecl::printName(llvm::raw_ostream &OS,
   OS << ']';
 }
 
+void DestructuringDecl::anchor() {}
+
+DestructuringDecl *DestructuringDecl::Create(ASTContext &C, DeclContext *DC,
+                                             SourceLocation StartLoc,
+                                             SourceLocation LSquareLoc,
+                                             QualType T, TypeSourceInfo *TInfo,
+                                             StorageClass SC,
+                                             ArrayRef<BindingDecl *> Bindings) {
+  size_t Extra = additionalSizeToAlloc<BindingDecl *>(Bindings.size());
+  return new (C, DC, Extra)
+      DestructuringDecl(C, DC, StartLoc, LSquareLoc, T, TInfo, SC, Bindings);
+}
+
+DestructuringDecl *DestructuringDecl::CreateDeserialized(ASTContext &C,
+                                                         unsigned ID,
+                                                         unsigned NumBindings) {
+  size_t Extra = additionalSizeToAlloc<BindingDecl *>(NumBindings);
+  auto *Result = new (C, ID, Extra)
+      DestructuringDecl(C, nullptr, SourceLocation(), SourceLocation(),
+                        QualType(), nullptr, StorageClass(), std::nullopt);
+  // Set up and clean out the bindings array.
+  Result->NumBindings = NumBindings;
+  auto *Trail = Result->getTrailingObjects<BindingDecl *>();
+  for (unsigned I = 0; I != NumBindings; ++I)
+    new (Trail + I) BindingDecl*(nullptr);
+  return Result;
+}
+
+void DestructuringDecl::printName(llvm::raw_ostream &OS,
+                                  const PrintingPolicy &Policy) const {
+  OS << '[';
+  bool Comma = false;
+  for (const auto *B : bindings()) {
+    if (Comma)
+      OS << ", ";
+    B->printName(OS, Policy);
+    Comma = true;
+  }
+  OS << ']';
+}
+
 void MSPropertyDecl::anchor() {}
 
 MSPropertyDecl *MSPropertyDecl::Create(ASTContext &C, DeclContext *DC,

@@ -173,6 +173,13 @@ static void getFieldsAndGlobalVars(const Decl &D,
         // FIXME: should we be using `E->getFoundDecl()`?
         if (const auto *FD = dyn_cast<FieldDecl>(ME->getMemberDecl()))
           Fields.insert(FD);
+
+  if (const auto *Destr = dyn_cast<DestructuringDecl>(&D))
+    for (const auto *B : Destr->bindings())
+      if (auto *ME = dyn_cast_or_null<MemberExpr>(B->getBinding()))
+        // FIXME: should we be using `E->getFoundDecl()`?
+        if (const auto *FD = dyn_cast<FieldDecl>(ME->getMemberDecl()))
+          Fields.insert(FD);
 }
 
 /// Traverses `S` and inserts into `Vars` any global storage values that are

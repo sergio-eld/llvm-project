@@ -11881,6 +11881,14 @@ bool ASTContext::DeclMustBeEmitted(const Decl *D) {
         if (DeclMustBeEmitted(BindingVD))
           return true;
 
+  // Likewise, variables with destructuring bindings are required if their
+  // bindings have side-effects.
+  if (const auto *DD = dyn_cast<DestructuringDecl>(VD))
+    for (const auto *BD : DD->bindings())
+      if (const auto *BindingVD = BD->getHoldingVar())
+        if (DeclMustBeEmitted(BindingVD))
+          return true;
+
   return false;
 }
 

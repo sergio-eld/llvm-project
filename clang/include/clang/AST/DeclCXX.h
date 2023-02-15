@@ -64,6 +64,7 @@ class CXXFinalOverriderMap;
 class CXXIndirectPrimaryBaseSet;
 class CXXMethodDecl;
 class DecompositionDecl;
+class DestructuringDecl;
 class FriendDecl;
 class FunctionTemplateDecl;
 class IdentifierInfo;
@@ -4116,6 +4117,59 @@ public:
 
   static bool classof(const Decl *D) { return classofKind(D->getKind()); }
   static bool classofKind(Kind K) { return K == Decomposition; }
+};
+
+/// Experimental ES6 destructuring declaration. For instance, given:
+///
+///   struct {int age, const char *name} person{ 46, "John" };
+///   const auto &{name, age} = person;
+///
+/// the second line declares a DestructuringDecl of type 'const person&', and
+/// two BindingDecls (named name and age) that reference person's fields with
+/// corresponding names. An instance of this class is always
+/// unnamed, but behaves in almost all other respects like a VarDecl.
+class DestructuringDecl final
+    : public VarDecl,
+      private llvm::TrailingObjects<DestructuringDecl, BindingDecl *> {
+  /// The number of BindingDecl*s following this object.
+  unsigned NumBindings;
+
+  DestructuringDecl(ASTContext &C, DeclContext *DC, SourceLocation StartLoc,
+                    SourceLocation LSquareLoc, QualType T,
+                    TypeSourceInfo *TInfo, StorageClass SC,
+                    ArrayRef<BindingDecl *> Bindings)
+      : VarDecl(Destructuring, C, DC, StartLoc, LSquareLoc, nullptr, T, TInfo,
+                SC),
+        NumBindings(Bindings.size()) {
+    std::uninitialized_copy(Bindings.begin(), Bindings.end(),
+                            getTrailingObjects<BindingDecl *>());
+    for (auto *B : Bindings)
+      B->setDecomposedDecl(this);
+  }
+
+  void anchor() override;
+
+public:
+  friend class ASTDeclReader;
+  friend TrailingObjects;
+
+  static DestructuringDecl *Create(ASTContext &C, DeclContext *DC,
+                                   SourceLocation StartLoc,
+                                   SourceLocation LSquareLoc,
+                                   QualType T, TypeSourceInfo *TInfo,
+                                   StorageClass S,
+                                   ArrayRef<BindingDecl *> Bindings);
+  static DestructuringDecl *CreateDeserialized(ASTContext &C, unsigned ID,
+                                               unsigned NumBindings);
+
+  ArrayRef<BindingDecl *> bindings() const {
+    return llvm::ArrayRef(getTrailingObjects<BindingDecl *>(), NumBindings);
+  }
+
+  void printName(raw_ostream &OS, const PrintingPolicy &Policy) const override;
+
+  static bool classof(const Decl *D) { return classofKind(D->getKind()); }
+  static bool classofKind(Kind K) { return K == Destructuring; }
 };
 
 /// An instance of this class represents the declaration of a property

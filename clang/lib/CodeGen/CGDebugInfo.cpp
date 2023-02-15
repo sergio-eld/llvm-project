@@ -4717,6 +4717,12 @@ CGDebugInfo::EmitDeclareOfAutoVariable(const VarDecl *VD, llvm::Value *Storage,
                   VD->getType()->isReferenceType());
     }
 
+  if (auto *DD = dyn_cast<DestructuringDecl>(VD))
+    for (auto *B : DD->bindings()) {
+      EmitDeclare(B, Storage, std::nullopt, Builder,
+                  VD->getType()->isReferenceType());
+    }
+
   return EmitDeclare(VD, Storage, std::nullopt, Builder, UsePointerValue);
 }
 

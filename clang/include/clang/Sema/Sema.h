@@ -2924,6 +2924,9 @@ public:
   NamedDecl *
   ActOnDecompositionDeclarator(Scope *S, Declarator &D,
                                MultiTemplateParamsArg TemplateParamLists);
+  NamedDecl *
+  ActOnDestructuringDeclarator(Scope *S, Declarator &D,
+                               MultiTemplateParamsArg TemplateParamLists);
   // Returns true if the variable declaration is a redeclaration
   bool CheckVariableDeclaration(VarDecl *NewVD, LookupResult &Previous);
   void CheckVariableDeclarationType(VarDecl *NewVD);
@@ -2931,6 +2934,7 @@ public:
                                      Expr *Init);
   void CheckCompleteVariableDeclaration(VarDecl *VD);
   void CheckCompleteDecompositionDeclaration(DecompositionDecl *DD);
+  void CheckCompleteDestructuringDeclaration(DestructuringDecl *DD);
   void MaybeSuggestAddingStaticToDecl(const FunctionDecl *D);
 
   NamedDecl* ActOnFunctionDeclarator(Scope* S, Declarator& D, DeclContext* DC,
@@ -7891,6 +7895,10 @@ public:
   CheckStructuredBindingMemberAccess(SourceLocation UseLoc,
                                      CXXRecordDecl *DecomposedClass,
                                      DeclAccessPair Field);
+  AccessResult
+  CheckDestructuringMemberAccess(SourceLocation UseLoc,
+                                 CXXRecordDecl *DecomposedClass,
+                                 DeclAccessPair Field);
   AccessResult CheckMemberOperatorAccess(SourceLocation Loc, Expr *ObjectExpr,
                                          const SourceRange &,
                                          DeclAccessPair FoundDecl);

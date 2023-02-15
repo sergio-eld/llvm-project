@@ -429,6 +429,7 @@ bool serialization::isRedeclarableDeclKind(unsigned Kind) {
   case Decl::OMPDeclareMapper:
   case Decl::BuiltinTemplate:
   case Decl::Decomposition:
+  case Decl::Destructuring:
   case Decl::Binding:
   case Decl::Concept:
   case Decl::ImplicitConceptSpecialization:

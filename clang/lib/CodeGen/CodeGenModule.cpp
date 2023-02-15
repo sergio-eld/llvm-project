@@ -6320,6 +6320,18 @@ void CodeGenModule::EmitTopLevelDecl(Decl *D) {
       for (auto *B : DD->bindings())
         if (auto *HD = B->getHoldingVar())
           EmitGlobal(HD);
+    if (auto *DD = dyn_cast<DestructuringDecl>(D))
+      for (auto *B : DD->bindings())
+        if (auto *HD = B->getHoldingVar())
+          EmitGlobal(HD);
+    break;
+
+  case Decl::Destructuring:
+    EmitGlobal(cast<VarDecl>(D));
+    if (auto *DD = dyn_cast<DestructuringDecl>(D))
+      for (auto *B : DD->bindings())
+        if (auto *HD = B->getHoldingVar())
+          EmitGlobal(HD);
     break;
 
   // Indirect fields from global anonymous structs and unions can be

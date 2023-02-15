@@ -322,6 +322,37 @@ void Declarator::setDecompositionBindings(
   }
 }
 
+void Declarator::setDestructuringBindings(
+    SourceLocation LBraceLoc,
+    ArrayRef<DestructuringDeclarator::Binding> Bindings,
+    SourceLocation RBraceLoc) {
+  assert(!hasName() && "declarator given multiple names!");
+
+  DestrBindingGroup.LBraceLoc = LBraceLoc;
+  DestrBindingGroup.RBraceLoc = RBraceLoc;
+  DestrBindingGroup.NumBindings = Bindings.size();
+  Range.setEnd(RBraceLoc);
+
+  // We're now past the identifier.
+  SetIdentifier(nullptr, LBraceLoc);
+  Name.EndLocation = RBraceLoc;
+
+  // Allocate storage for bindings and stash them away.
+  if (Bindings.size()) {
+    if (!InlineStorageUsed && Bindings.size() <= std::size(InlineDestrBindings)) {
+      DestrBindingGroup.Bindings = InlineDestrBindings;
+      DestrBindingGroup.DeleteBindings = false;
+      InlineStorageUsed = true;
+    } else {
+      DestrBindingGroup.Bindings =
+          new DestructuringDeclarator::Binding[Bindings.size()];
+      DestrBindingGroup.DeleteBindings = true;
+    }
+    std::uninitialized_copy(Bindings.begin(), Bindings.end(),
+                            DestrBindingGroup.Bindings);
+  }
+}
+
 bool Declarator::isDeclarationOfFunction() const {
   for (unsigned i = 0, i_end = DeclTypeInfo.size(); i < i_end; ++i) {
     switch (DeclTypeInfo[i].Kind) {

@@ -5904,7 +5904,8 @@ static bool canPerformArrayCopy(const InitializedEntity &Entity) {
     // C++ [dcl.decomp]p1:
     //   [...] each element is copy-initialized or direct-initialized from the
     //   corresponding element of the assignment-expression [...]
-    return isa<DecompositionDecl>(Entity.getDecl());
+    return isa<DecompositionDecl>(Entity.getDecl()) ||
+           isa<DestructuringDecl>(Entity.getDecl());
 
   case InitializedEntity::EK_Member:
     // C++ [class.copy.ctor]p14:

@@ -311,6 +311,42 @@ public:
         }
       }
     }
+
+    // `DestructuringDecl` must be handled after we've interpreted the loc
+    // itself, because the binding expression refers back to the
+    // `DestructuringDecl` (even though it has no written name).
+    if (const auto *Destr = dyn_cast<DestructuringDecl>(&D)) {
+      // If VarDecl is a DestructuringDecl, evaluate each of its bindings. This
+      // needs to be evaluated after initializing the values in the storage for
+      // VarDecl, as the bindings refer to them.
+      // FIXME: Add support for ArraySubscriptExpr.
+      // FIXME: Consider adding AST nodes used in BindingDecls to the CFG.
+      for (const auto *B : Destr->bindings()) {
+        if (auto *ME = dyn_cast_or_null<MemberExpr>(B->getBinding())) {
+          auto *DE = dyn_cast_or_null<DeclRefExpr>(ME->getBase());
+          if (DE == nullptr)
+            continue;
+
+          // ME and its base haven't been visited because they aren't included
+          // in the statements of the CFG basic block.
+          VisitDeclRefExpr(DE);
+          VisitMemberExpr(ME);
+
+          if (auto *Loc = Env.getStorageLocation(*ME, SkipPast::Reference))
+            Env.setStorageLocation(*B, *Loc);
+        } else if (auto *VD = B->getHoldingVar()) {
+          // Holding vars are used to back the BindingDecls of tuple-like
+          // types. The holding var declarations appear *after* this statement,
+          // so we have to create a location for them here to share with `B`. We
+          // don't visit the binding, because we know it will be a DeclRefExpr
+          // to `VD`. Note that, by construction of the AST, `VD` will always be
+          // a reference -- either lvalue or rvalue.
+          auto &VDLoc = Env.createStorageLocation(*VD);
+          Env.setStorageLocation(*VD, VDLoc);
+          Env.setStorageLocation(*B, VDLoc);
+        }
+      }
+    }
   }
 
   void VisitImplicitCastExpr(const ImplicitCastExpr *S) {

@@ -216,6 +216,11 @@ bool ByteCodeStmtGen<Emitter>::visitDeclStmt(const DeclStmt *DS) {
     if (auto *DD = dyn_cast<DecompositionDecl>(D)) {
       return this->bail(DD);
     }
+
+    // Destructuring declarator.
+    if (auto *DD = dyn_cast<DestructuringDecl>(D)) {
+      return this->bail(DD);
+    }
   }
 
   return true;

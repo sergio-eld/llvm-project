@@ -80,6 +80,17 @@ bool LiveVariables::LivenessValues::isLive(const VarDecl *D) const {
     alive |= liveDecls.contains(DD);
     return alive;
   }
+  if (const auto *DD = dyn_cast<DestructuringDecl>(D)) {
+    bool alive = false;
+    for (const BindingDecl *BD : DD->bindings())
+      alive |= liveBindings.contains(BD);
+
+    // Note: the only known case this condition is necessary, is when a binding
+    // to a tuple-like structure is created. The HoldingVar initializers have a
+    // DeclRefExpr to the DecompositionDecl.
+    alive |= liveDecls.contains(DD);
+    return alive;
+  }
   return liveDecls.contains(D);
 }
 
@@ -396,6 +407,17 @@ void TransferFunctions::VisitDeclRefExpr(DeclRefExpr *DR) {
 void TransferFunctions::VisitDeclStmt(DeclStmt *DS) {
   for (const auto *DI : DS->decls()) {
     if (const auto *DD = dyn_cast<DecompositionDecl>(DI)) {
+      for (const auto *BD : DD->bindings()) {
+        if (const auto *HV = BD->getHoldingVar())
+          val.liveDecls = LV.DSetFact.remove(val.liveDecls, HV);
+
+        val.liveBindings = LV.BSetFact.remove(val.liveBindings, BD);
+      }
+
+      // When a bindig to a tuple-like structure is created, the HoldingVar
+      // initializers have a DeclRefExpr to the DecompositionDecl.
+      val.liveDecls = LV.DSetFact.remove(val.liveDecls, DD);
+    } else if (const auto *DD = dyn_cast<DestructuringDecl>(DI)) {
       for (const auto *BD : DD->bindings()) {
         if (const auto *HV = BD->getHoldingVar())
           val.liveDecls = LV.DSetFact.remove(val.liveDecls, HV);

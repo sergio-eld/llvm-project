@@ -2776,6 +2776,9 @@ StmtResult Sema::BuildCXXForRangeStmt(SourceLocation ForLoc,
       if (auto *DD = dyn_cast<DecompositionDecl>(LoopVar))
         for (auto *Binding : DD->bindings())
           Binding->setType(Context.DependentTy);
+      if (auto *DD = dyn_cast<DestructuringDecl>(LoopVar))
+        for (auto *Binding : DD->bindings())
+          Binding->setType(Context.DependentTy);
       LoopVar->setType(SubstAutoTypeDependent(LoopVar->getType()));
     }
   } else if (!BeginDeclStmt.get()) {

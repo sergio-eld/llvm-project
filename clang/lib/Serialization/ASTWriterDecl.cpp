@@ -104,6 +104,7 @@ namespace clang {
     void VisitImplicitParamDecl(ImplicitParamDecl *D);
     void VisitParmVarDecl(ParmVarDecl *D);
     void VisitDecompositionDecl(DecompositionDecl *D);
+    void VisitDestructuringDecl(DestructuringDecl *D);
     void VisitBindingDecl(BindingDecl *D);
     void VisitNonTypeTemplateParmDecl(NonTypeTemplateParmDecl *D);
     void VisitTemplateDecl(TemplateDecl *D);
@@ -1187,6 +1188,16 @@ void ASTDeclWriter::VisitDecompositionDecl(DecompositionDecl *D) {
   for (auto *B : D->bindings())
     Record.AddDeclRef(B);
   Code = serialization::DECL_DECOMPOSITION;
+}
+
+void ASTDeclWriter::VisitDestructuringDecl(DestructuringDecl *D) {
+  // Record the number of bindings first to simplify deserialization.
+  Record.push_back(D->bindings().size());
+
+  VisitVarDecl(D);
+  for (auto *B : D->bindings())
+    Record.AddDeclRef(B);
+  Code = serialization::DECL_DESTRUCTURING;
 }
 
 void ASTDeclWriter::VisitBindingDecl(BindingDecl *D) {

@@ -745,6 +745,9 @@ bool ItaniumMangleContextImpl::shouldMangleCXXName(const NamedDecl *D) {
     if (isa<DecompositionDecl>(VD))
       return true;
 
+    if (isa<DestructuringDecl>(VD))
+      return true;
+
     // C variables are not mangled.
     if (VD->isExternC())
       return false;
@@ -1434,6 +1437,19 @@ void CXXNameMangler::mangleUnqualifiedName(
       //  <unqualified-name> ::= DC <source-name>* E
       //
       // Proposed on cxx-abi-dev on 2016-08-12
+      Out << "DC";
+      for (auto *BD : DD->bindings())
+        mangleSourceName(BD->getDeclName().getAsIdentifierInfo());
+      Out << 'E';
+      writeAbiTags(ND, AdditionalAbiTags);
+      break;
+    }
+
+    // We mangle destructuring declarations as the names of their bindings.
+    if (auto *DD = dyn_cast<DestructuringDecl>(ND)) {
+      // FIXME: Non-standard mangling for destructuring declarations:
+      //  see mangling for decomposition declarations
+
       Out << "DC";
       for (auto *BD : DD->bindings())
         mangleSourceName(BD->getDeclName().getAsIdentifierInfo());

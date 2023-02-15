@@ -380,6 +380,7 @@ namespace clang {
     void VisitImplicitParamDecl(ImplicitParamDecl *PD);
     void VisitParmVarDecl(ParmVarDecl *PD);
     void VisitDecompositionDecl(DecompositionDecl *DD);
+    void VisitDestructuringDecl(DestructuringDecl *DD);
     void VisitBindingDecl(BindingDecl *BD);
     void VisitNonTypeTemplateParmDecl(NonTypeTemplateParmDecl *D);
     void VisitTemplateDecl(TemplateDecl *D);
@@ -1669,6 +1670,15 @@ void ASTDeclReader::VisitParmVarDecl(ParmVarDecl *PD) {
 }
 
 void ASTDeclReader::VisitDecompositionDecl(DecompositionDecl *DD) {
+  VisitVarDecl(DD);
+  auto **BDs = DD->getTrailingObjects<BindingDecl *>();
+  for (unsigned I = 0; I != DD->NumBindings; ++I) {
+    BDs[I] = readDeclAs<BindingDecl>();
+    BDs[I]->setDecomposedDecl(DD);
+  }
+}
+
+void ASTDeclReader::VisitDestructuringDecl(DestructuringDecl *DD) {
   VisitVarDecl(DD);
   auto **BDs = DD->getTrailingObjects<BindingDecl *>();
   for (unsigned I = 0; I != DD->NumBindings; ++I) {
@@ -3858,6 +3868,9 @@ Decl *ASTReader::ReadDeclRecord(DeclID ID) {
     break;
   case DECL_DECOMPOSITION:
     D = DecompositionDecl::CreateDeserialized(Context, ID, Record.readInt());
+    break;
+  case DECL_DESTRUCTURING:
+    D = DestructuringDecl::CreateDeserialized(Context, ID, Record.readInt());
     break;
   case DECL_BINDING:
     D = BindingDecl::CreateDeserialized(Context, ID);

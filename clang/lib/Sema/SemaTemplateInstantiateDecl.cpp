@@ -1099,6 +1099,25 @@ Decl *TemplateDeclInstantiator::VisitDecompositionDecl(DecompositionDecl *D) {
   return NewDD;
 }
 
+// TODO: adjust implementation for DestructuringDecl
+Decl *TemplateDeclInstantiator::VisitDestructuringDecl(DestructuringDecl *D) {
+  // Transform the bindings first.
+  SmallVector<BindingDecl*, 16> NewBindings;
+  for (auto *OldBD : D->bindings())
+    NewBindings.push_back(cast<BindingDecl>(VisitBindingDecl(OldBD)));
+  ArrayRef<BindingDecl*> NewBindingArray = NewBindings;
+
+  auto *NewDD = cast_or_null<DestructuringDecl>(
+      // TODO: handle VisitVarDecl for Destructuring
+      VisitVarDecl(D, /*InstantiatingVarTemplate=*/false, &NewBindingArray));
+
+  if (!NewDD || NewDD->isInvalidDecl())
+    for (auto *NewBD : NewBindings)
+      NewBD->setInvalidDecl();
+
+  return NewDD;
+}
+
 Decl *TemplateDeclInstantiator::VisitVarDecl(VarDecl *D) {
   return VisitVarDecl(D, /*InstantiatingVarTemplate=*/false);
 }
@@ -1127,9 +1146,14 @@ Decl *TemplateDeclInstantiator::VisitVarDecl(VarDecl *D,
   // Build the instantiated declaration.
   VarDecl *Var;
   if (Bindings)
-    Var = DecompositionDecl::Create(SemaRef.Context, DC, D->getInnerLocStart(),
-                                    D->getLocation(), DI->getType(), DI,
-                                    D->getStorageClass(), *Bindings);
+    if (Decl::Decomposition == D->getKind())
+      Var = DecompositionDecl::Create(SemaRef.Context, DC, D->getInnerLocStart(),
+                                      D->getLocation(), DI->getType(), DI,
+                                      D->getStorageClass(), *Bindings);
+    else
+      Var = DestructuringDecl::Create(SemaRef.Context, DC, D->getInnerLocStart(),
+                                      D->getLocation(), DI->getType(), DI,
+                                      D->getStorageClass(), *Bindings);
   else
     Var = VarDecl::Create(SemaRef.Context, DC, D->getInnerLocStart(),
                           D->getLocation(), D->getIdentifier(), DI->getType(),

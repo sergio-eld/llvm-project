@@ -6257,6 +6257,11 @@ void Parser::ParseDirectDeclarator(Declarator &D) {
         D.getCXXScopeSpec().isEmpty())
       return ParseDecompositionDeclarator(D);
 
+    // Experimental support for ES6 Destructuring
+    if (Tok.is(tok::l_brace) && !D.mayOmitIdentifier() &&
+        D.getCXXScopeSpec().isEmpty())
+      return ParseDestructuringDeclarator(D);
+
     // Don't parse FOO:BAR as if it were a typo for FOO::BAR inside a class, in
     // this context it is a bitfield. Also in range-based for statement colon
     // may delimit for-range-declaration.
@@ -6651,6 +6656,59 @@ void Parser::ParseDecompositionDeclarator(Declarator &D) {
   return D.setDecompositionBindings(T.getOpenLocation(), Bindings,
                                     T.getCloseLocation());
 }
+
+void Parser::ParseDestructuringDeclarator(Declarator &D) {
+  assert(Tok.is(tok::l_brace));
+
+  BalancedDelimiterTracker T(*this, tok::l_brace);
+  T.consumeOpen();
+
+  SmallVector<DestructuringDeclarator::Binding, 32> Bindings;
+  while (Tok.isNot(tok::r_brace)) {
+    if (!Bindings.empty()) {
+      if (Tok.is(tok::comma))
+        ConsumeToken();
+      else {
+        if (Tok.is(tok::identifier)) {
+          SourceLocation EndLoc = getEndOfPreviousToken();
+          Diag(EndLoc, diag::err_expected)
+              << tok::comma << FixItHint::CreateInsertion(EndLoc, ",");
+        } else {
+          Diag(Tok, diag::err_expected_comma_or_rsquare);
+        }
+
+        SkipUntil(tok::r_square, tok::comma, tok::identifier,
+                  StopAtSemi | StopBeforeMatch);
+        if (Tok.is(tok::comma))
+          ConsumeToken();
+        else if (Tok.isNot(tok::identifier))
+          break;
+      }
+    }
+
+    if (Tok.isNot(tok::identifier)) {
+      Diag(Tok, diag::err_expected) << tok::identifier;
+      break;
+    }
+
+    Bindings.push_back({Tok.getIdentifierInfo(), Tok.getLocation()});
+    ConsumeToken();
+  }
+
+  if (Tok.isNot(tok::r_brace))
+    // We've already diagnosed a problem here.
+    T.skipToEnd();
+  else {
+    if (Bindings.empty())
+      Diag(Tok.getLocation(), diag::ext_destructuring_decl_empty);
+
+    T.consumeClose();
+  }
+
+  return D.setDestructuringBindings(T.getOpenLocation(), Bindings,
+                                    T.getCloseLocation());
+}
+
 
 /// ParseParenDeclarator - We parsed the declarator D up to a paren.  This is
 /// only called before the identifier, so these are most likely just grouping

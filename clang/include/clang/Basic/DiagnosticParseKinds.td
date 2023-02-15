@@ -466,6 +466,10 @@ def ext_decomp_decl_empty : ExtWarn<
   "ISO C++17 does not allow a decomposition group to be empty">,
   InGroup<DiagGroup<"empty-decomposition">>;
 
+def ext_destructuring_decl_empty : ExtWarn<
+  "Experimental: ES6 destructuring group is not allowed to be empty">,
+  InGroup<DiagGroup<"empty-destructuring">>;
+
 /// Objective-C parser diagnostics
 def err_expected_minus_or_plus : Error<
   "method type specifier must start with '-' or '+'">;

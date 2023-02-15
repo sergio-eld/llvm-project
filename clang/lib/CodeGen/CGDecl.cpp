@@ -167,6 +167,18 @@ void CodeGenFunction::EmitDecl(const Decl &D) {
           EmitVarDecl(*HD);
     return;
   }
+  case Decl::Destructuring: {
+    // TODO: needs modification?
+    const VarDecl &VD = cast<VarDecl>(D);
+    assert(VD.isLocalVarDecl() &&
+           "Should not see file-scope variables inside a function!");
+    EmitVarDecl(VD);
+    if (auto *DD = dyn_cast<DestructuringDecl>(&VD))
+      for (auto *B : DD->bindings())
+        if (auto *HD = B->getHoldingVar())
+          EmitVarDecl(*HD);
+    return;
+  }
 
   case Decl::OMPDeclareReduction:
     return CGM.EmitOMPDeclareReduction(cast<OMPDeclareReductionDecl>(&D), this);

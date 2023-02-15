@@ -1315,6 +1315,14 @@ bool CursorVisitor::VisitDecompositionDecl(DecompositionDecl *D) {
   return VisitVarDecl(D);
 }
 
+bool CursorVisitor::VisitDestructuringDecl(DestructuringDecl *D) {
+  for (auto *B : D->bindings()) {
+    if (Visit(MakeCXCursor(B, TU, RegionOfInterest)))
+      return true;
+  }
+  return VisitVarDecl(D);
+}
+
 bool CursorVisitor::VisitConceptDecl(ConceptDecl *D) {
   if (VisitTemplateParameters(D->getTemplateParameters()))
     return true;
@@ -6774,6 +6782,7 @@ CXCursor clang_getCursorDefinition(CXCursor C) {
   case Decl::Var:
   case Decl::VarTemplateSpecialization:
   case Decl::VarTemplatePartialSpecialization:
+  case Decl::Destructuring: // TODO: special needs?
   case Decl::Decomposition: {
     // Ask the variable if it has a definition.
     if (const VarDecl *Def = cast<VarDecl>(D)->getDefinition())

@@ -41,6 +41,7 @@
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
 #include <optional>
 #include <set>
+#include <clang/Sema/Sema.h>
 
 using namespace clang;
 using namespace llvm::omp;

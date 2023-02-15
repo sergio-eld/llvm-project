@@ -3106,60 +3106,83 @@ void ExprEngine::VisitCommonDeclRefExpr(const Expr *Ex, const NamedDecl *D,
     return;
   }
   if (const auto *BD = dyn_cast<BindingDecl>(D)) {
-    const auto *DD = cast<DecompositionDecl>(BD->getDecomposedDecl());
+    if (const auto *DD = dyn_cast<DecompositionDecl>(BD->getDecomposedDecl())) {
+      SVal Base = state->getLValue(DD, LCtx);
+      if (DD->getType()->isReferenceType()) {
+        if (const MemRegion *R = Base.getAsRegion())
+          Base = state->getSVal(R);
+        else
+          Base = UnknownVal();
+      }
 
-    SVal Base = state->getLValue(DD, LCtx);
-    if (DD->getType()->isReferenceType()) {
-      if (const MemRegion *R = Base.getAsRegion())
-        Base = state->getSVal(R);
-      else
-        Base = UnknownVal();
-    }
+      SVal V = UnknownVal();
 
-    SVal V = UnknownVal();
+      // Handle binding to data members
+      if (const auto *ME = dyn_cast<MemberExpr>(BD->getBinding())) {
+        const auto *Field = cast<FieldDecl>(ME->getMemberDecl());
+        V = state->getLValue(Field, Base);
+      }
+      // Handle binding to arrays
+      else if (const auto *ASE = dyn_cast<ArraySubscriptExpr>(BD->getBinding())) {
+        SVal Idx = state->getSVal(ASE->getIdx(), LCtx);
 
-    // Handle binding to data members
-    if (const auto *ME = dyn_cast<MemberExpr>(BD->getBinding())) {
-      const auto *Field = cast<FieldDecl>(ME->getMemberDecl());
-      V = state->getLValue(Field, Base);
-    }
-    // Handle binding to arrays
-    else if (const auto *ASE = dyn_cast<ArraySubscriptExpr>(BD->getBinding())) {
-      SVal Idx = state->getSVal(ASE->getIdx(), LCtx);
+        // Note: the index of an element in a structured binding is automatically
+        // created and it is a unique identifier of the specific element. Thus it
+        // cannot be a value that varies at runtime.
+        assert(Idx.isConstant() && "BindingDecl array index is not a constant!");
 
-      // Note: the index of an element in a structured binding is automatically
-      // created and it is a unique identifier of the specific element. Thus it
-      // cannot be a value that varies at runtime.
-      assert(Idx.isConstant() && "BindingDecl array index is not a constant!");
+        V = state->getLValue(BD->getType(), Idx, Base);
+      }
+      // Handle binding to tuple-like structures
+      else if (const auto *HV = BD->getHoldingVar()) {
+        V = state->getLValue(HV, LCtx);
 
-      V = state->getLValue(BD->getType(), Idx, Base);
-    }
-    // Handle binding to tuple-like structures
-    else if (const auto *HV = BD->getHoldingVar()) {
-      V = state->getLValue(HV, LCtx);
+        if (HV->getType()->isReferenceType()) {
+          if (const MemRegion *R = V.getAsRegion())
+              V = state->getSVal(R);
+          else
+              V = UnknownVal();
+        }
+      } else
+        llvm_unreachable("An unknown case of structured binding encountered!");
 
-      if (HV->getType()->isReferenceType()) {
+      // In case of tuple-like types the references are already handled, so we
+      // don't want to handle them again.
+      if (BD->getType()->isReferenceType() && !BD->getHoldingVar()) {
         if (const MemRegion *R = V.getAsRegion())
           V = state->getSVal(R);
         else
           V = UnknownVal();
       }
-    } else
-      llvm_unreachable("An unknown case of structured binding encountered!");
 
-    // In case of tuple-like types the references are already handled, so we
-    // don't want to handle them again.
-    if (BD->getType()->isReferenceType() && !BD->getHoldingVar()) {
-      if (const MemRegion *R = V.getAsRegion())
-        V = state->getSVal(R);
-      else
-        V = UnknownVal();
+      Bldr.generateNode(Ex, Pred, state->BindExpr(Ex, LCtx, V), nullptr,
+                        ProgramPoint::PostLValueKind);
+
+      return;
     }
+    if (const auto *DD = dyn_cast<DestructuringDecl>(BD->getDecomposedDecl())) {
+      SVal Base = state->getLValue(DD, LCtx);
+      if (DD->getType()->isReferenceType()) {
+        if (const MemRegion *R = Base.getAsRegion())
+          Base = state->getSVal(R);
+        else
+          Base = UnknownVal();
+      }
 
-    Bldr.generateNode(Ex, Pred, state->BindExpr(Ex, LCtx, V), nullptr,
-                      ProgramPoint::PostLValueKind);
+      SVal V = UnknownVal();
 
-    return;
+      // Handle binding to data members
+      if (const auto *ME = dyn_cast<MemberExpr>(BD->getBinding())) {
+        const auto *Field = cast<FieldDecl>(ME->getMemberDecl());
+        V = state->getLValue(Field, Base);
+      } else
+        llvm_unreachable("An unknown case of destructuring binding encountered!");
+
+      Bldr.generateNode(Ex, Pred, state->BindExpr(Ex, LCtx, V), nullptr,
+                        ProgramPoint::PostLValueKind);
+
+      return;
+    }
   }
 
   if (const auto *TPO = dyn_cast<TemplateParamObjectDecl>(D)) {

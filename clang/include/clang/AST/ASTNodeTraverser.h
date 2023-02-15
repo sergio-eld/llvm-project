@@ -461,6 +461,12 @@ public:
       Visit(B);
   }
 
+  void VisitDestructuringDecl(const DestructuringDecl *D) {
+    VisitVarDecl(D);
+    for (const auto *B : D->bindings())
+      Visit(B);
+  }
+
   void VisitBindingDecl(const BindingDecl *D) {
     if (Traversal == TK_IgnoreUnlessSpelledInSource)
       return;

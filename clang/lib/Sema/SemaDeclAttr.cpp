@@ -9749,6 +9749,8 @@ void Sema::PopParsingDeclaration(ParsingDeclState state, Decl *decl) {
         // inaccessible one at a time.
         if (AnyAccessFailures && isa<DecompositionDecl>(decl))
           continue;
+        if (AnyAccessFailures && isa<DestructuringDecl>(decl))
+          continue;
         HandleDelayedAccessCheck(diag, decl);
         if (diag.Triggered)
           AnyAccessFailures = true;

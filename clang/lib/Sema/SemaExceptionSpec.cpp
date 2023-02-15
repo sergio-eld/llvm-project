@@ -1085,6 +1085,11 @@ static CanThrowResult canVarDeclThrow(Sema &Self, const VarDecl *VD) {
       if (auto *HD = B->getHoldingVar())
         CT = mergeCanThrow(CT, canVarDeclThrow(Self, HD));
 
+  if (auto *DD = dyn_cast<DestructuringDecl>(VD))
+    for (auto *B : DD->bindings())
+      if (auto *HD = B->getHoldingVar())
+        CT = mergeCanThrow(CT, canVarDeclThrow(Self, HD));
+
   return CT;
 }
 

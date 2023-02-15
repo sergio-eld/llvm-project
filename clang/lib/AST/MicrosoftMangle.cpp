@@ -525,7 +525,7 @@ bool MicrosoftMangleContextImpl::shouldMangleCXXName(const NamedDecl *D) {
     return false;
 
   const VarDecl *VD = dyn_cast<VarDecl>(D);
-  if (VD && !isa<DecompositionDecl>(D)) {
+  if (VD && !isa<DecompositionDecl>(D) && !isa<DestructuringDecl>(D)) {
     // C variables are not mangled.
     if (VD->isExternC())
       return false;
@@ -998,6 +998,16 @@ void MicrosoftCXXNameMangler::mangleUnqualifiedName(GlobalDecl GD,
 
       if (const DecompositionDecl *DD = dyn_cast<DecompositionDecl>(ND)) {
         // Decomposition declarations are considered anonymous, and get
+        // numbered with a $S prefix.
+        llvm::SmallString<64> Name("$S");
+        // Get a unique id for the anonymous struct.
+        Name += llvm::utostr(Context.getAnonymousStructId(DD) + 1);
+        mangleSourceName(Name);
+        break;
+      }
+
+      if (const DestructuringDecl *DD = dyn_cast<DestructuringDecl>(ND)) {
+        // Destructuring declarations are considered anonymous, and get
         // numbered with a $S prefix.
         llvm::SmallString<64> Name("$S");
         // Get a unique id for the anonymous struct.

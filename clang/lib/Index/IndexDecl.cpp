@@ -317,6 +317,12 @@ public:
     return Base::VisitDecompositionDecl(D);
   }
 
+  bool VisitDestructuringDecl(const DestructuringDecl *D) {
+    for (const auto *Binding : D->bindings())
+      TRY_DECL(Binding, IndexCtx.handleDecl(Binding));
+    return Base::VisitDestructuringDecl(D);
+  }
+
   bool VisitFieldDecl(const FieldDecl *D) {
     SmallVector<SymbolRelation, 4> Relations;
     gatherTemplatePseudoOverrides(D, Relations);

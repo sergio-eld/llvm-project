@@ -1976,6 +1976,13 @@ static bool ShouldDiagnoseUnusedDecl(const NamedDecl *D) {
     for (auto *BD : DD->bindings())
       if (BD->isReferenced())
         return false;
+  } else if (auto *DD = dyn_cast<DestructuringDecl>(D)) {
+    // For a destructuring declaration, warn if none of the bindings are
+    // referenced, instead of if the variable itself is referenced (which
+    // it is, by the bindings' expressions).
+    for (auto *BD : DD->bindings())
+      if (BD->isReferenced())
+        return false;
   } else if (!D->getDeclName()) {
     return false;
   } else if (D->isReferenced() || D->isUsed()) {
@@ -6232,6 +6239,8 @@ NamedDecl *Sema::HandleDeclarator(Scope *S, Declarator &D,
   // one, the ParsedFreeStandingDeclSpec action should be used.
   if (D.isDecompositionDeclarator()) {
     return ActOnDecompositionDeclarator(S, D, TemplateParamLists);
+  } else if (D.isDestructuringDeclarator()) {
+    return ActOnDestructuringDeclarator(S, D, TemplateParamLists);
   } else if (!Name) {
     if (!D.isInvalidType())  // Reject this if we think it is valid.
       Diag(D.getDeclSpec().getBeginLoc(), diag::err_declarator_need_ident)
@@ -7426,6 +7435,14 @@ NamedDecl *Sema::ActOnVariableDeclarator(
       II = Decomp.bindings()[0].Name;
       Name = II;
     }
+  } else if (D.isDestructuringDeclarator()) {
+    // Take the name of the first declarator as our name for diagnostic
+    // purposes.
+    auto &Destr = D.getDestructuringDeclarator();
+    if (!Destr.bindings().empty()) {
+      II = Destr.bindings()[0].Name;
+      Name = II;
+    }
   } else if (!II) {
     Diag(D.getIdentifierLoc(), diag::err_bad_variable_name) << Name;
     return nullptr;
@@ -7647,6 +7664,10 @@ NamedDecl *Sema::ActOnVariableDeclarator(
       NewVD = DecompositionDecl::Create(Context, DC, D.getBeginLoc(),
                                         D.getIdentifierLoc(), R, TInfo, SC,
                                         Bindings);
+    } else if (D.isDestructuringDeclarator()) {
+      NewVD = DestructuringDecl::Create(Context, DC, D.getBeginLoc(),
+                                        D.getIdentifierLoc(), R, TInfo, SC,
+                                        Bindings);
     } else
       NewVD = VarDecl::Create(Context, DC, D.getBeginLoc(),
                               D.getIdentifierLoc(), II, R, TInfo, SC);
@@ -7704,7 +7725,8 @@ NamedDecl *Sema::ActOnVariableDeclarator(
     NewTemplate->setLexicalDeclContext(CurContext);
 
   if (IsLocalExternDecl) {
-    if (D.isDecompositionDeclarator())
+    if (D.isDecompositionDeclarator() ||
+        D.isDestructuringDeclarator())
       for (auto *B : Bindings)
         B->setLocalExternDecl();
     else
@@ -14187,6 +14209,10 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
   // Build the bindings if this is a structured binding declaration.
   if (auto *DD = dyn_cast<DecompositionDecl>(var))
     CheckCompleteDecompositionDeclaration(DD);
+
+  // Build the bindings if this is a destructuring declaration.
+  if (auto *DD = dyn_cast<DestructuringDecl>(var))
+    CheckCompleteDestructuringDeclaration(DD);
 }
 
 /// Check if VD needs to be dllexport/dllimport due to being in a
@@ -14284,6 +14310,12 @@ void Sema::FinalizeDeclaration(Decl *ThisDecl) {
   }
 
   if (auto *DD = dyn_cast<DecompositionDecl>(ThisDecl)) {
+    for (auto *BD : DD->bindings()) {
+      FinalizeDeclaration(BD);
+    }
+  }
+
+  if (auto *DD = dyn_cast<DestructuringDecl>(ThisDecl)) {
     for (auto *BD : DD->bindings()) {
       FinalizeDeclaration(BD);
     }
@@ -17835,6 +17867,13 @@ FieldDecl *Sema::HandleField(Scope *S, RecordDecl *Record,
     const DecompositionDeclarator &Decomp = D.getDecompositionDeclarator();
     Diag(Decomp.getLSquareLoc(), diag::err_decomp_decl_context)
       << Decomp.getSourceRange();
+    return nullptr;
+  }
+
+  if (D.isDestructuringDeclarator()) {
+    const DestructuringDeclarator &Destr = D.getDestructuringDeclarator();
+    Diag(Destr.getLBraceLoc(), diag::err_destructuring_decl_context)
+        << Destr.getSourceRange();
     return nullptr;
   }
 

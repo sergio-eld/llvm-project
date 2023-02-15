@@ -150,6 +150,14 @@ void Decl::setInvalidDecl(bool Invalid) {
       Binding->setInvalidDecl();
     }
   }
+
+  // Marking a DestructuringDecl as invalid implies all the child BindingDecl's
+  // are invalid too.
+  if (auto *DD = dyn_cast<DestructuringDecl>(this)) {
+    for (auto *Binding : DD->bindings()) {
+      Binding->setInvalidDecl();
+    }
+  }
 }
 
 bool DeclContext::hasValidDeclKind() const {
@@ -853,6 +861,7 @@ unsigned Decl::getIdentifierNamespaceForKind(Kind DeclKind) {
     case TranslationUnit:
     case ExternCContext:
     case Decomposition:
+    case Destructuring:
     case MSGuid:
     case UnnamedGlobalConstant:
     case TemplateParamObject:

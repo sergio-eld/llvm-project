@@ -1210,7 +1210,9 @@ public:
   ///
   ///   void foo() { int x; static int y; extern int z; }
   bool isLocalVarDecl() const {
-    if (getKind() != Decl::Var && getKind() != Decl::Decomposition)
+    if (getKind() != Decl::Var &&
+        getKind() != Decl::Decomposition &&
+        getKind() != Decl::Destructuring)
       return false;
     if (const DeclContext *DC = getLexicalDeclContext())
       return DC->getRedeclContext()->isFunctionOrMethod();
@@ -1224,7 +1226,9 @@ public:
 
   /// Similar to isLocalVarDecl, but excludes variables declared in blocks.
   bool isFunctionOrMethodVarDecl() const {
-    if (getKind() != Decl::Var && getKind() != Decl::Decomposition)
+    if (getKind() != Decl::Var &&
+        getKind() != Decl::Decomposition &&
+        getKind() != Decl::Destructuring)
       return false;
     const DeclContext *DC = getLexicalDeclContext()->getRedeclContext();
     return DC->isFunctionOrMethod() && DC->getDeclKind() != Decl::Block;

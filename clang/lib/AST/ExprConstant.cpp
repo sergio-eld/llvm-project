@@ -4886,6 +4886,11 @@ static bool EvaluateDecl(EvalInfo &Info, const Decl *D) {
       if (auto *VD = BD->getHoldingVar())
         OK &= EvaluateDecl(Info, VD);
 
+  if (const DestructuringDecl *DD = dyn_cast<DestructuringDecl>(D))
+    for (auto *BD : DD->bindings())
+      if (auto *VD = BD->getHoldingVar())
+        OK &= EvaluateDecl(Info, VD);
+
   return OK;
 }
 

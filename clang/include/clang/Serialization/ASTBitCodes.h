@@ -1523,6 +1523,9 @@ enum DeclCode {
   /// An ImplicitConceptSpecializationDecl record.
   DECL_IMPLICIT_CONCEPT_SPECIALIZATION,
 
+  /// A DestructuringDecl record.
+  DECL_DESTRUCTURING,
+
   DECL_LAST = DECL_IMPLICIT_CONCEPT_SPECIALIZATION
 };
 

@@ -249,6 +249,7 @@ public:
   bool VisitStaticAssertDecl(StaticAssertDecl *D);
   bool VisitFriendDecl(FriendDecl *D);
   bool VisitDecompositionDecl(DecompositionDecl *D);
+  bool VisitDestructuringDecl(DestructuringDecl *D);
   bool VisitConceptDecl(ConceptDecl *D);
   bool VisitTypeConstraint(const TypeConstraint &TC);
   bool VisitConceptRequirement(const concepts::Requirement &R);

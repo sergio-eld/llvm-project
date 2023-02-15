@@ -1720,6 +1720,60 @@ struct DeclaratorChunk {
   }
 };
 
+/// (Experimental) A Destructuring declarator of the form
+/// `{` identifier-list '}'
+class DestructuringDeclarator {
+public:
+  struct Binding {
+    IdentifierInfo *Name;
+    SourceLocation NameLoc;
+  };
+
+  // TODO: es6 Assignments
+
+private:
+  /// The locations of the '{' and '}' tokens.
+  SourceLocation LBraceLoc, RBraceLoc;
+
+  /// The bindings.
+  Binding *Bindings;
+  unsigned NumBindings : 31;
+  unsigned DeleteBindings : 1;
+
+  friend class Declarator;
+
+public:
+  DestructuringDeclarator()
+      : Bindings(nullptr), NumBindings(0), DeleteBindings(false) {}
+  DestructuringDeclarator(const DestructuringDeclarator &G) = delete;
+  DestructuringDeclarator &operator=(const DestructuringDeclarator &G) = delete;
+  ~DestructuringDeclarator() {
+    if (DeleteBindings)
+      delete[] Bindings;
+  }
+
+  void clear() {
+    LBraceLoc = RBraceLoc = SourceLocation();
+    if (DeleteBindings)
+      delete[] Bindings;
+    Bindings = nullptr;
+    NumBindings = 0;
+    DeleteBindings = false;
+  }
+
+  ArrayRef<Binding> bindings() const {
+    return llvm::ArrayRef(Bindings, NumBindings);
+  }
+
+  bool isSet() const { return LBraceLoc.isValid(); }
+
+  SourceLocation getLBraceLoc() const { return LBraceLoc; }
+  SourceLocation getRBraceLoc() const { return RBraceLoc; }
+  SourceRange getSourceRange() const {
+    return SourceRange(LBraceLoc, RBraceLoc);
+  }
+};
+
 /// A parsed C++17 decomposition declarator of the form
 ///   '[' identifier-list ']'
 class DecompositionDeclarator {
@@ -1845,6 +1899,9 @@ private:
   /// The C++17 structured binding, if any. This is an alternative to a Name.
   DecompositionDeclarator BindingGroup;
 
+  /// Experimental ES6 destructured bindings, if any. This is an alternative to a Name.
+  DestructuringDeclarator DestrBindingGroup;
+
   /// DeclTypeInfo - This holds each type that the declarator includes as it is
   /// parsed.  This is pushed from the identifier out, which means that element
   /// #0 will be the most closely bound to the identifier, and
@@ -1911,6 +1968,7 @@ private:
     /// function chunk in the declarator.
     DeclaratorChunk::ParamInfo InlineParams[16];
     DecompositionDeclarator::Binding InlineBindings[16];
+    DestructuringDeclarator::Binding InlineDestrBindings[16];
 #ifndef _MSC_VER
   };
 #endif
@@ -1989,6 +2047,10 @@ public:
 
   const DecompositionDeclarator &getDecompositionDeclarator() const {
     return BindingGroup;
+  }
+
+  const DestructuringDeclarator &getDestructuringDeclarator() const {
+    return DestrBindingGroup;
   }
 
   DeclaratorContext getContext() const { return Context; }
@@ -2172,6 +2234,51 @@ public:
     llvm_unreachable("unknown context kind!");
   }
 
+  /// Return true if the context permits an ES6 destructuring declarator.
+  bool mayHaveDestructuringDeclarator() const {
+    // virtually identical to decomposition
+    switch (Context) {
+    case DeclaratorContext::File:
+      // FIXME: It's not clear that the proposal meant to allow file-scope
+      // structured bindings, but it does.
+    case DeclaratorContext::Block:
+    case DeclaratorContext::ForInit:
+    case DeclaratorContext::SelectionInit:
+    case DeclaratorContext::Condition:
+      return true;
+
+    case DeclaratorContext::Member:
+    case DeclaratorContext::Prototype:  // TODO: yield true
+    case DeclaratorContext::TemplateParam:
+    case DeclaratorContext::RequiresExpr:
+      // Maybe one day...
+      return false;
+
+    // These contexts don't allow any kind of non-abstract declarator.
+    case DeclaratorContext::KNRTypeList:
+    case DeclaratorContext::TypeName:
+    case DeclaratorContext::FunctionalCast:
+    case DeclaratorContext::AliasDecl:
+    case DeclaratorContext::AliasTemplate:
+    case DeclaratorContext::LambdaExprParameter:
+    case DeclaratorContext::ObjCParameter:
+    case DeclaratorContext::ObjCResult:
+    case DeclaratorContext::CXXNew:
+    case DeclaratorContext::CXXCatch:
+    case DeclaratorContext::ObjCCatch:
+    case DeclaratorContext::BlockLiteral:
+    case DeclaratorContext::LambdaExpr:
+    case DeclaratorContext::ConversionId:
+    case DeclaratorContext::TemplateArg:
+    case DeclaratorContext::TemplateTypeArg:
+    case DeclaratorContext::TrailingReturn:
+    case DeclaratorContext::TrailingReturnVar:
+    case DeclaratorContext::Association:
+      return false;
+    }
+    llvm_unreachable("unknown context kind!");
+  }
+
   /// mayBeFollowedByCXXDirectInit - Return true if the declarator can be
   /// followed by a C++ direct initializer, e.g. "int x(1);".
   bool mayBeFollowedByCXXDirectInit() const {
@@ -2240,12 +2347,18 @@ public:
   /// binding (which is not exactly a name, but occupies the same position).
   bool hasName() const {
     return Name.getKind() != UnqualifiedIdKind::IK_Identifier ||
-           Name.Identifier || isDecompositionDeclarator();
+           Name.Identifier || isDecompositionDeclarator() ||
+           isDestructuringDeclarator();
   }
 
   /// Return whether this declarator is a decomposition declarator.
   bool isDecompositionDeclarator() const {
     return BindingGroup.isSet();
+  }
+
+  /// Return whether this declarator is a destructuring declarator.
+  bool isDestructuringDeclarator() const {
+    return DestrBindingGroup.isSet();
   }
 
   IdentifierInfo *getIdentifier() const {
@@ -2266,6 +2379,12 @@ public:
   setDecompositionBindings(SourceLocation LSquareLoc,
                            ArrayRef<DecompositionDeclarator::Binding> Bindings,
                            SourceLocation RSquareLoc);
+
+  /// Set the destructuring bindings for this declarator.
+  void
+  setDestructuringBindings(SourceLocation LBraceLoc,
+                           ArrayRef<DestructuringDeclarator::Binding> Bindings,
+                           SourceLocation RBraceLoc);
 
   /// AddTypeInfo - Add a chunk to this declarator. Also extend the range to
   /// EndLoc, which should be the last token of the chunk.

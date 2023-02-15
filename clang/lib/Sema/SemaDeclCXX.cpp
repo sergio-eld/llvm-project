@@ -936,6 +936,150 @@ Sema::ActOnDecompositionDeclarator(Scope *S, Declarator &D,
   return New;
 }
 
+NamedDecl *
+Sema::ActOnDestructuringDeclarator(Scope *S, Declarator &D,
+                                   MultiTemplateParamsArg TemplateParamLists) {
+  assert(D.isDestructuringDeclarator());
+  const DestructuringDeclarator &Destr = D.getDestructuringDeclarator();
+
+  if (!D.mayHaveDestructuringDeclarator()) {
+    Diag(Destr.getLBraceLoc(), diag::err_destructuring_decl_context)
+        << Destr.getSourceRange();
+    return nullptr;
+  }
+
+  if (!TemplateParamLists.empty()) {
+    // FIXME: There's no rule against this, but there are also no rules that
+    // would actually make it usable, so we reject it for now.
+    Diag(TemplateParamLists.front()->getTemplateLoc(),
+         diag::err_destructuring_decl_template);
+    return nullptr;
+  }
+
+  // The semantic context is always just the current context.
+  DeclContext *const DC = CurContext;
+
+  auto &DS = D.getDeclSpec();
+  {
+    // TODO: other diagnostics like for DestructuringDeclarator
+
+    // We can't recover from it being declared as a typedef.
+    if (DS.getStorageClassSpec() == DeclSpec::SCS_typedef)
+      return nullptr;
+  }
+
+  TypeSourceInfo *TInfo = GetTypeForDeclarator(D, S);
+  QualType R = TInfo->getType();
+
+  if (DiagnoseUnexpandedParameterPack(D.getIdentifierLoc(), TInfo,
+                                      UPPC_DeclarationType))
+    D.setInvalidType();
+
+  // The syntax only allows a single ref-qualifier prior to the decomposition
+  // declarator. No other declarator chunks are permitted. Also check the type
+  // specifier here.
+  if (DS.getTypeSpecType() != DeclSpec::TST_auto ||
+      D.hasGroupingParens() || D.getNumTypeObjects() > 1 ||
+      (D.getNumTypeObjects() == 1 &&
+       D.getTypeObject(0).Kind != DeclaratorChunk::Reference)) {
+    Diag(Destr.getLBraceLoc(),
+         (D.hasGroupingParens() ||
+          (D.getNumTypeObjects() &&
+           D.getTypeObject(0).Kind == DeclaratorChunk::Paren))
+             ? diag::err_destructuring_decl_parens
+             : diag::err_destructuring_decl_type)
+        << R;
+
+    // In most cases, there's no actual problem with an explicitly-specified
+    // type, but a function type won't work here, and ActOnVariableDeclarator
+    // shouldn't be called for such a type.
+    if (R->isFunctionType())
+      D.setInvalidType();
+  }
+
+  // Constrained auto is prohibited by [decl.pre]p6, so check that here.
+  if (DS.isConstrainedAuto()) {
+    TemplateIdAnnotation *TemplRep = DS.getRepAsTemplateId();
+    assert(TemplRep->Kind == TNK_Concept_template &&
+           "No other template kind should be possible for a constrained auto");
+
+    SourceRange TemplRange{TemplRep->TemplateNameLoc,
+                           TemplRep->RAngleLoc.isValid()
+                               ? TemplRep->RAngleLoc
+                               : TemplRep->TemplateNameLoc};
+    Diag(TemplRep->TemplateNameLoc, diag::err_destructuring_decl_constraint)
+        << TemplRange << FixItHint::CreateRemoval(TemplRange);
+  }
+
+  // TODO: implement the differences
+
+  // Build the BindingDecls.
+  SmallVector<BindingDecl*, 8> Bindings;
+
+  // Build the BindingDecls.
+  for (auto &B : D.getDestructuringDeclarator().bindings()) {
+    // Check for name conflicts.
+    DeclarationNameInfo NameInfo(B.Name, B.NameLoc);
+    LookupResult Previous(*this, NameInfo, LookupOrdinaryName,
+                          ForVisibleRedeclaration);
+    LookupName(Previous, S,
+               /*CreateBuiltins*/DC->getRedeclContext()->isTranslationUnit());
+
+    // It's not permitted to shadow a template parameter name.
+    if (Previous.isSingleResult() &&
+        Previous.getFoundDecl()->isTemplateParameter()) {
+      DiagnoseTemplateParameterShadow(D.getIdentifierLoc(),
+                                      Previous.getFoundDecl());
+      Previous.clear();
+    }
+
+    auto *BD = BindingDecl::Create(Context, DC, B.NameLoc, B.Name);
+
+    // Find the shadowed declaration before filtering for scope.
+    NamedDecl *ShadowedDecl = D.getCXXScopeSpec().isEmpty()
+                                  ? getShadowedDeclaration(BD, Previous)
+                                  : nullptr;
+
+    bool ConsiderLinkage = DC->isFunctionOrMethod() &&
+                           DS.getStorageClassSpec() == DeclSpec::SCS_extern;
+    FilterLookupForScope(Previous, DC, S, ConsiderLinkage,
+                         /*AllowInlineNamespace*/false);
+
+    if (!Previous.empty()) {
+      auto *Old = Previous.getRepresentativeDecl();
+      Diag(B.NameLoc, diag::err_redefinition) << B.Name;
+      Diag(Old->getLocation(), diag::note_previous_definition);
+    } else if (ShadowedDecl && !D.isRedeclaration()) {
+      CheckShadow(BD, ShadowedDecl, Previous);
+    }
+    PushOnScopeChains(BD, S, true);
+    Bindings.push_back(BD);
+    ParsingInitForAutoVars.insert(BD);
+  }
+
+  // There are no prior lookup results for the variable itself, because it
+  // is unnamed.
+  DeclarationNameInfo NameInfo((IdentifierInfo *)nullptr,
+                               Destr.getLBraceLoc());
+  LookupResult Previous(*this, NameInfo, LookupOrdinaryName,
+                        ForVisibleRedeclaration);
+
+  // Build the variable that holds the non-decomposed object.
+  bool AddToScope = true;
+  NamedDecl *New =
+      ActOnVariableDeclarator(S, D, DC, TInfo, Previous,
+                              MultiTemplateParamsArg(), AddToScope, Bindings);
+  if (AddToScope) {
+    S->AddDecl(New);
+    CurContext->addHiddenDecl(New);
+  }
+
+  if (isInOpenMPDeclareTargetContext())
+    checkDeclIsAllowedInOpenMPTarget(nullptr, New);
+
+  return New;
+}
+
 static bool checkSimpleDecomposition(
     Sema &S, ArrayRef<BindingDecl *> Bindings, ValueDecl *Src,
     QualType DecompType, const llvm::APSInt &NumElems, QualType ElemType,
@@ -1570,6 +1714,161 @@ void Sema::CheckCompleteDecompositionDeclaration(DecompositionDecl *DD) {
     DD->setInvalidDecl();
 }
 
+// TODO: adjust implementation for Destructuring
+static bool checkMemberDestructuring(Sema &S, ArrayRef<BindingDecl*> Bindings,
+                                     ValueDecl *Src, QualType DestrType,
+                                     const CXXRecordDecl *OrigRD) {
+  if (S.RequireCompleteType(Src->getLocation(), DestrType,
+                            diag::err_incomplete_type))
+    return true;
+
+  // TODO: adjust implementation for Destructuring. Don't care about base classes,
+  //  only about visible named fields.
+  // TODO: (?) spec on what can be accessed
+  CXXCastPath BasePath;
+  DeclAccessPair BasePair =
+      findDecomposableBaseClass(S, Src->getLocation(), OrigRD, BasePath);
+  const CXXRecordDecl *RD = cast_or_null<CXXRecordDecl>(BasePair.getDecl());
+  if (!RD)
+    return true;
+  QualType BaseType = S.Context.getQualifiedType(S.Context.getRecordType(RD),
+                                                 DestrType.getQualifiers());
+
+  // TODO: all the visible names including base classes
+  for (auto *B : Bindings) {
+    const auto &BName = B->getDeclName();
+    auto It = llvm::find_if(RD->fields(),
+                                    [&BName](const FieldDecl* FD) -> bool{
+      if (FD->isUnnamedBitfield() || !FD->getDeclName())
+        return false;
+
+      return FD->getDeclName() == BName;
+    });
+
+    if (It == RD->fields().end())
+    {
+      // TODO: diagnose, (?) collect all the invalid names
+      S.Diag(Src->getLocation(), diag::err_no_member)
+          << BName << RD << B->getSourceRange();
+      return true;
+    }
+
+    SourceLocation Loc = B->getLocation();
+    FieldDecl *FD = *It;
+
+    // The field must be accessible in the context of the structured binding.
+    // We already checked that the base class is accessible.
+    // FIXME: Add 'const' to AccessedEntity's classes so we can remove the
+    // const_cast here.
+    // TODO: adjust implementation for Destructuring
+    S.CheckDestructuringMemberAccess(
+        Loc, const_cast<CXXRecordDecl *>(OrigRD),
+        DeclAccessPair::make(FD, CXXRecordDecl::MergeAccess(
+                                     BasePair.getAccess(), FD->getAccess())));
+
+    // Initialize the binding to Src.FD.
+    ExprResult E = S.BuildDeclRefExpr(Src, DestrType, VK_LValue, Loc);
+    if (E.isInvalid())
+      return true;
+    E = S.ImpCastExprToType(E.get(), BaseType, CK_UncheckedDerivedToBase,
+                            VK_LValue, &BasePath);
+    if (E.isInvalid())
+      return true;
+    E = S.BuildFieldReferenceExpr(E.get(), /*IsArrow*/ false, Loc,
+                                  CXXScopeSpec(), FD,
+                                  DeclAccessPair::make(FD, FD->getAccess()),
+                                  DeclarationNameInfo(FD->getDeclName(), Loc));
+    if (E.isInvalid())
+      return true;
+
+    // If the type of the member is T, the referenced type is cv T, where cv is
+    // the cv-qualification of the decomposition expression.
+    //
+    // FIXME: We resolve a defect here: if the field is mutable, we do not add
+    // 'const' to the type of the field.
+    Qualifiers Q = DestrType.getQualifiers();
+    if (FD->isMutable())
+      Q.removeConst();
+    B->setBinding(S.BuildQualifiedType(FD->getType(), Loc, Q), E.get());
+  }
+
+  return false;
+}
+
+// TODO: adjust implementation for Destructuring
+void Sema::CheckCompleteDestructuringDeclaration(DestructuringDecl *DD) {
+  QualType DestrType = DD->getType();
+
+  // If the type of the destructuring is dependent, then so is the type of
+  // each binding.
+  if (DestrType->isDependentType()) {
+    for (auto *B : DD->bindings())
+      B->setType(Context.DependentTy);
+    return;
+  }
+
+  DestrType = DestrType.getNonReferenceType();
+  ArrayRef<BindingDecl*> Bindings = DD->bindings();
+
+  // C++1z [dcl.decomp]/2:
+  //   If E is an array type [...]
+  // As an extension, we also support decomposition of built-in complex and
+  // vector types.
+  // TODO: only non-union classes are allowed
+//  if (auto *CAT = Context.getAsConstantArrayType(DestrType)) {
+//    if (checkArrayDecomposition(*this, Bindings, DD, DestrType, CAT))
+//      DD->setInvalidDecl();
+//    return;
+//  }
+  // TODO: only non-union classes are allowed
+//  if (auto *VT = DestrType->getAs<VectorType>()) {
+//    if (checkVectorDecomposition(*this, Bindings, DD, DestrType, VT))
+//      DD->setInvalidDecl();
+//    return;
+//  }
+  // TODO: only non-union classes are allowed
+//  if (auto *CT = DestrType->getAs<ComplexType>()) {
+//    if (checkComplexDecomposition(*this, Bindings, DD, DestrType, CT))
+//      DD->setInvalidDecl();
+//    return;
+//  }
+
+  // C++1z [dcl.decomp]/3:
+  //   if the expression std::tuple_size<E>::value is a well-formed integral
+  //   constant expression, [...]
+  // TODO: only non-union classes are allowed
+//  llvm::APSInt TupleSize(32);
+//  switch (isTupleLike(*this, DD->getLocation(), DestrType, TupleSize)) {
+//  case IsTupleLike::Error:
+//    DD->setInvalidDecl();
+//    return;
+//
+//  case IsTupleLike::TupleLike:
+//    if (checkTupleLikeDecomposition(*this, Bindings, DD, DestrType, TupleSize))
+//      DD->setInvalidDecl();
+//    return;
+//
+//  case IsTupleLike::NotTupleLike:
+//    break;
+//  }
+
+  // C++1z [dcl.dcl]/8:
+  //   [E shall be of array or non-union class type]
+  CXXRecordDecl *RD = DestrType->getAsCXXRecordDecl();
+  if (!RD || RD->isUnion()) {
+    Diag(DD->getLocation(), diag::err_destructuring_decl_unbindable_type)
+        << DD << !RD << DestrType;
+    DD->setInvalidDecl();
+    return;
+  }
+
+  // C++1z [dcl.decomp]/4:
+  //   all of E's non-static data members shall be [...] direct members of
+  //   E or of the same unambiguous public base class of E, ...
+  if (checkMemberDestructuring(*this, Bindings, DD, DestrType, RD))
+    DD->setInvalidDecl();
+}
+
 /// Merge the exception specifications of two variable declarations.
 ///
 /// This is called when there's a redeclaration of a VarDecl. The function
@@ -1916,6 +2215,7 @@ static bool CheckConstexprDeclStmt(Sema &SemaRef, const FunctionDecl *Dcl,
       continue;
 
     case Decl::Var:
+    case Decl::Destructuring: // TODO: special needs?
     case Decl::Decomposition: {
       // C++1y [dcl.constexpr]p3 allows anything except:
       //   a definition of a variable of non-literal type or of static or

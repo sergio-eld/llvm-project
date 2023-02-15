@@ -534,6 +534,71 @@ def err_decomp_decl_std_tuple_size_not_constant : Error<
 def note_in_binding_decl_init : Note<
   "in implicit initialization of binding declaration %0">;
 
+// C++ Experimental ES6 destructuring support
+def err_destructuring_decl_context : Error<
+  "destructuring declaration not permitted in this context">;
+def ext_destructuring_decl : ExtWarn<
+  "destructuring declarations are an Experimental ES6 extension">, InGroup<CXX17>;
+def ext_destructuring_decl_cond : ExtWarn<
+  "destructuring declaration is not permitted in a condition">,
+  InGroup<DiagGroup<"destructuring-in-condition">>;
+def err_destructuring_decl_spec : Error<
+  "destructuring declaration cannot be declared "
+  "%plural{1:'%1'|:with '%1' specifiers}0">;
+def ext_destructuring_decl_spec : ExtWarn<
+  "destructuring declaration declared "
+  "%plural{1:'%1'|:with '%1' specifiers}0 is a C++20 extension">,
+  InGroup<CXX20>;
+def warn_cxx17_compat_destructuring_decl_spec : Warning<
+  "destructuring declaration declared "
+  "%plural{1:'%1'|:with '%1' specifiers}0 "
+  "is incompatible with C++ standards before C++20">,
+  InGroup<CXXPre20Compat>, DefaultIgnore;
+def err_destructuring_decl_type : Error<
+  "destructuring declaration cannot be declared with type %0; "
+  "declared type must be 'auto' or reference to 'auto'">;
+def err_destructuring_decl_constraint : Error<
+  "destructuring declaration cannot be declared with constrained 'auto'">;
+def err_destructuring_decl_parens : Error<
+  "destructuring declaration cannot be declared with parentheses">;
+def err_destructuring_decl_template : Error<
+  "destructuring declaration template not supported">;
+def err_destructuring_decl_not_alone : Error<
+  "destructuring declaration must be the only declaration in its group">;
+def err_destructuring_decl_requires_init : Error<
+  "destructuring declaration %0 requires an initializer">;
+def err_destructuring_decl_wrong_number_bindings : Error<
+  "type %0 decomposes into %3 %plural{1:element|:elements}2, but "
+  "%select{%plural{0:no|:only %1}1|%1}4 "
+  "%plural{1:name was|:names were}1 provided">;
+def err_destructuring_decl_unbindable_type : Error<
+  "cannot decompose %select{union|non-class}1 type %2">;
+def err_destructuring_decl_multiple_bases_with_members : Error<
+  "cannot decompose class type %1: "
+  "%select{its base classes %2 and|both it and its base class}0 %3 "
+  "have non-static data members">;
+def err_destructuring_decl_ambiguous_base : Error<
+  "cannot decompose members of ambiguous base class %1 of %0:%2">;
+def err_destructuring_decl_inaccessible_base : Error<
+  "cannot decompose members of inaccessible base class %1 of %0">,
+  AccessControl;
+def err_destructuring_decl_inaccessible_field : Error<
+  "destructuring is not allowed on a %select{private|protected}0 member %1 of %3">,
+  AccessControl;
+def err_destructuring_decl_lambda : Error<
+  "cannot decompose lambda closure type">;
+def err_destructuring_decl_anon_union_member : Error<
+  "cannot decompose class type %0 because it has an anonymous "
+  "%select{struct|union}1 member">;
+def err_destructuring_decl_std_tuple_element_not_specialized : Error<
+  "cannot decompose this type; 'std::tuple_element<%0>::type' "
+  "does not name a type">;
+def err_destructuring_decl_std_tuple_size_not_constant : Error<
+  "cannot decompose this type; 'std::tuple_size<%0>::value' "
+  "is not a valid integral constant expression">;
+def note_in_destructuring_decl_init : Note<
+  "in implicit initialization of destructuring declaration %0">;
+
 def err_std_type_trait_not_class_template : Error<
   "unsupported standard library implementation: "
   "'std::%0' is not a class template">;

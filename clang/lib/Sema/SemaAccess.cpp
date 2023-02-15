@@ -1763,6 +1763,22 @@ Sema::CheckStructuredBindingMemberAccess(SourceLocation UseLoc,
   return CheckAccess(*this, UseLoc, Entity);
 }
 
+/// Checks implicit access to a member in a destructuring.
+Sema::AccessResult
+Sema::CheckDestructuringMemberAccess(SourceLocation UseLoc,
+                                     CXXRecordDecl *DestructuredClass,
+                                     DeclAccessPair Field) {
+  if (!getLangOpts().AccessControl ||
+      Field.getAccess() == AS_public)
+    return AR_accessible;
+
+  AccessTarget Entity(Context, AccessTarget::Member, DestructuredClass, Field,
+                      Context.getRecordType(DestructuredClass));
+  Entity.setDiag(diag::err_destructuring_decl_inaccessible_field);
+
+  return CheckAccess(*this, UseLoc, Entity);
+}
+
 Sema::AccessResult Sema::CheckMemberOperatorAccess(SourceLocation OpLoc,
                                                    Expr *ObjectExpr,
                                                    const SourceRange &Range,
