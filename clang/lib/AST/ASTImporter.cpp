@@ -4270,16 +4270,7 @@ ExpectedDecl ASTNodeImporter::VisitVarDecl(VarDecl *D) {
             Loc, ToType, ToTypeSourceInfo, D->getStorageClass(), Bindings))
       return ToDecomp;
     ToVar = ToDecomp;
-  } else {
-    // Create the imported variable.
-    if (GetImportedOrCreateDecl(ToVar, D, Importer.getToContext(), DC,
-                                ToInnerLocStart, Loc,
-                                Name.getAsIdentifierInfo(), ToType,
-                                ToTypeSourceInfo, D->getStorageClass()))
-      return ToVar;
-  }
-
-  if (auto *FromDestr = dyn_cast<DestructuringDecl>(D)) {
+  } else if (auto *FromDestr = dyn_cast<DestructuringDecl>(D)) {
     SmallVector<BindingDecl *> Bindings(FromDestr->bindings().size());
     if (Error Err =
             ImportArrayChecked(FromDestr->bindings(), Bindings.begin()))
